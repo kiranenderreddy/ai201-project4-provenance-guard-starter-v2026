@@ -42,64 +42,53 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. False positives
 
-<!-- Your criterion. It must name a number. -->
-
-
+Of 10 clearly human-written samples, at most 1 may receive the high-confidence AI label.
 
 **Why this target:**
 
-
+A false accusation is more harmful to a real writer than allowing some AI-generated text to pass through. I chose at most 1 false positive in 10 because I want the strongest AI label to be used cautiously.
 
 ---
 
-## 2.
+## 2. Score spread
 
-<!-- Your criterion. -->
-
-
+The average combined score for clearly AI-generated text should be at least 0.20 higher than the average combined score for clearly human-written text.
 
 **Why this target:**
 
-
+I chose a 0.20 gap because I want clearly AI and clearly human writing to have a noticeable separation rather than receiving almost identical scores. A smaller gap would make the final labels less meaningful.
 
 ---
 
-## 3.
+## 3. Label coverage
 
-<!-- Your criterion. -->
-
-
+All three reader-facing labels must be reachable using no more than 6 deliberately chosen test inputs.
 
 **Why this target:**
 
-
+Each label represents a different level of confidence, so every label should actually be reachable. Six inputs gives me enough room to deliberately test examples near each score range without making the test unnecessarily large.
 
 ---
 
-## 4.
+## 4. Appeal path
 
-<!-- Your criterion. -->
-
-
+In 3 out of 3 valid appeal tests, submitting an appeal must change the content status to `under_review` and create an audit-log entry.
 
 **Why this target:**
 
-
+The appeal path is deterministic system behavior rather than a probabilistic model prediction. For a valid content ID, I expect the appeal process and audit logging to work every time.
 
 ---
 
-## 5.
+## 5. Bad input
 
-<!-- Your criterion. -->
-
-
+In 3 out of 3 invalid-input tests, requests with missing or empty `text` must return a controlled 4xx response instead of crashing the service.
 
 **Why this target:**
 
-
-
+Invalid requests should fail safely and predictably. I chose 3 out of 3 because input validation is deterministic and should not sometimes produce an internal server error.
 ---
 
 <!-- ─────────────────────────────────────────────────────────────────────────
