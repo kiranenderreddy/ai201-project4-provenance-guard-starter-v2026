@@ -39,9 +39,71 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
+## What This Does
 
+1. A creator sends text and a `creator_id` to `POST /submit`.
+2. The service validates the incoming request.
+3. Signal one in `detector.py` reads the submitted text and produces an AI-detection score.
+4. Signal two in `stylometry.py` measures properties of the writing itself, such as sentence-length variation, vocabulary diversity, and punctuation patterns.
+5. `scoring.py::combine_signals` combines the two signal scores into one overall confidence score.
+6. The combined score is mapped to one of three reader-facing labels.
+7. The submission, signal scores, final score, label, creator, content ID, timestamp, and status are written to `logs/audit.jsonl`.
+8. If the creator disagrees with the result, they can submit an appeal using the content ID. The status changes to `under_review` and the appeal is recorded in the audit log.
 
----
+### False-positive trace
+
+A false positive happens when a real writer submits their own work but the system gives it a strong AI-generated score. The writer receives a `content_id`, the combined confidence score, and a reader-facing label.
+
+If the writer believes the result is wrong, they can appeal using the `content_id` and explain their reasoning. The appeal changes the submission status to `under_review` and is recorded in the audit log.
+
+This matters when choosing thresholds because a false accusation can negatively affect a legitimate writer. I therefore want the system to be cautious before showing its strongest AI-generated label.
+
+### Endpoint contracts
+
+#### POST /submit
+
+**Input**
+
+```json
+{
+  "text": "Text submitted by the creator",
+  "creator_id": "creator123"
+}
+```
+
+**Output**
+
+```json
+{
+  "content_id": "unique-content-id",
+  "guess": "ai_or_human_guess",
+  "confidence": 0.0,
+  "label": "reader-facing label",
+  "model_score": 0.0,
+  "style_score": 0.0,
+  "status": "submitted"
+}
+```
+
+#### POST /appeal
+
+**Input**
+
+```json
+{
+  "content_id": "unique-content-id",
+  "reasoning": "Why the creator believes the result should be reviewed"
+}
+```
+
+**Output**
+
+```json
+{
+  "content_id": "unique-content-id",
+  "status": "under_review"
+}
+```
 
 ## Signals and Scoring
 
@@ -54,18 +116,23 @@
 ### Signal one — the model signal
 
 **What it measures:**
+The model signal in `detector.py` analyzes the submitted text using a local language-model detector and produces a score r
 
 **Why that might differ between human and AI writing:**
+AI-generated text can have statistical language patterns, word choices, and sentence structures that differ from some naturally written human text, so a trained detector may recognize those patterns.
 
 **What it can't see:**
+The detector cannot know who actually wrote the text. Human writing may resemble AI-generated writing, and AI-generated text may be edited enough to resemble human writing.
 
 ### Signal two — the style signal
 
 **What it measures:**
-
+The style signal in `stylometry.py` will measure properties of the writing itself, such as sentence-length variation, vocabulary diversity, and punctuation density.
 **Why that might differ between human and AI writing:**
+Human and AI writing may differ in how repetitive or varied their sentences, vocabulary, and punctuation patterns are. These characteristics provide a second signal that is different from the model-based detector.
 
 **What it can't see:**
+Stylometry cannot determine authorship. A human can intentionally write in a regular or formal style, while AI-generated text can be edited to change sentence lengths, vocabulary, and punctuation patterns.
 
 ### The combining rule
 
