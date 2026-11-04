@@ -154,10 +154,12 @@ def health():
 # @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit():
     """
-    Take submitted text, run the first detector signal,
-    log the decision, and return the result.
+    Take submitted text, run both signals,
+    combine them, log the decision, and return the result.
     """
     import detector
+    import stylometry
+    import scoring
 
     payload = request.get_json(silent=True)
 
@@ -184,17 +186,28 @@ def submit():
 
     content_id = str(uuid.uuid4())
 
+    # Signal one
     model_score = detector.model_signal(text)
 
-    guess = "ai" if model_score >= 0.5 else "human"
+    # Signal two
+    style_score = stylometry.style_signal(text)
+
+    # Combine both signals
+    combined_score = scoring.combine_signals(
+        model_score,
+        style_score
+    )
+
+    # Temporary guess until Milestone 5 label mapping
+    guess = "ai" if combined_score >= 0.5 else "human"
 
     audit.log_decision(
         content_id=content_id,
         creator_id=creator_id,
         guess=guess,
         model_score=model_score,
-        style_score=None,
-        combined_score=None,
+        style_score=style_score,
+        combined_score=combined_score,
         label=None,
         status="decided"
     )
@@ -202,13 +215,13 @@ def submit():
     return jsonify({
         "content_id": content_id,
         "guess": guess,
-        "confidence": 0.0,
+        "confidence": combined_score,
         "label": "placeholder",
         "model_score": model_score,
-        "style_score": None,
+        "style_score": style_score,
+        "combined_score": combined_score,
         "status": "decided"
     })
-
 
 @app.post("/appeal")
 def appeal():
