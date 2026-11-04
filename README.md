@@ -21,34 +21,22 @@
 > That's a web service. Something sent it text and it sent something back.
 > Everything this unit is filling in the middle.
 >
-> **The rest of this file is your submission.** Fill it in as you go.
+> **The rest of this file is your submission.**
 
 ---
 
-<!-- ─────────────────────────────────────────────────────────────────────────
-     Unit 7 asks for the first five sections. Unit 8 adds the five below.
-
-     Everything is pasted as TEXT. A pasted curl response gets full credit;
-     a picture of your terminal gets none.
-     ───────────────────────────────────────────────────────────────────────── -->
-
 <!-- ═══════════════════════ UNIT 7 — THE BUILD ═══════════════════════ -->
-
-## What This Does
-
-<!-- The path a submission takes, from arriving to the label a reader sees.
-     Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
 ## What This Does
 
 1. A creator sends text and a `creator_id` to `POST /submit`.
 2. The service validates the incoming request.
 3. Signal one in `detector.py` reads the submitted text and produces an AI-detection score.
-4. Signal two in `stylometry.py` measures properties of the writing itself, such as sentence-length variation, vocabulary diversity, and punctuation patterns.
+4. Signal two in `stylometry.py` measures properties of the writing itself, including sentence-length variation, vocabulary diversity, and punctuation density.
 5. `scoring.py::combine_signals` combines the two signal scores into one overall confidence score.
-6. The combined score is mapped to one of three reader-facing labels.
-7. The submission, signal scores, final score, label, creator, content ID, timestamp, and status are written to `logs/audit.jsonl`.
-8. If the creator disagrees with the result, they can submit an appeal using the content ID. The status changes to `under_review` and the appeal is recorded in the audit log.
+6. `scoring.py::score_to_label` maps the combined score to one of three reader-facing labels.
+7. The submission, both signal scores, combined score, label, creator ID, content ID, timestamp, and status are written to `logs/audit.jsonl`.
+8. If the creator disagrees with the result, they can submit an appeal using the content ID. The status changes to `under_review`, and the appeal is recorded in the audit log.
 
 ### False-positive trace
 
@@ -76,12 +64,13 @@ This matters when choosing thresholds because a false accusation can negatively 
 ```json
 {
   "content_id": "unique-content-id",
-  "guess": "ai_or_human_guess",
+  "guess": "human_or_unsure_or_ai",
   "confidence": 0.0,
   "label": "reader-facing label",
   "model_score": 0.0,
   "style_score": 0.0,
-  "status": "submitted"
+  "combined_score": 0.0,
+  "status": "decided"
 }
 ```
 
@@ -101,140 +90,220 @@ This matters when choosing thresholds because a false accusation can negatively 
 ```json
 {
   "content_id": "unique-content-id",
+  "message": "Your appeal has been recorded for review.",
   "status": "under_review"
 }
 ```
 
+---
+
 ## Signals and Scoring
-
-<!-- For each signal: what property it measures, why that might differ between
-     human and AI writing, and WHAT IT CAN'T SEE.
-
-     The blind spot is not optional. If you can't name it you don't understand
-     the signal yet — and unit 8's attack set is built out of blind spots. -->
 
 ### Signal one — the model signal
 
 **What it measures:**
-The model signal in `detector.py` analyzes the submitted text using a local language-model detector and produces a score r
+
+The model signal in `detector.py` uses a local GPT-2 language model to measure how predictable the submitted text is. It produces a score between 0 and 1, where a higher score means the writing appears more AI-like to this detector.
 
 **Why that might differ between human and AI writing:**
-AI-generated text can have statistical language patterns, word choices, and sentence structures that differ from some naturally written human text, so a trained detector may recognize those patterns.
+
+AI-generated text can contain statistical language patterns, word choices, and sentence structures that are especially predictable to a language model. Some naturally written human text may be less predictable.
 
 **What it can't see:**
-The detector cannot know who actually wrote the text. Human writing may resemble AI-generated writing, and AI-generated text may be edited enough to resemble human writing.
+
+The detector cannot know who actually wrote the text. Human writing can resemble AI-generated writing, and AI-generated text can be edited enough to resemble human writing.
 
 ### Signal two — the style signal
 
 **What it measures:**
-The style signal in `stylometry.py` will measure properties of the writing itself, such as sentence-length variation, vocabulary diversity, and punctuation density.
+
+The style signal in `stylometry.py` measures sentence-length variation, vocabulary diversity, and punctuation density. These measurements are combined into a score from 0 to 1, where a higher score means the text appears more AI-like according to the style rules.
+
 **Why that might differ between human and AI writing:**
-Human and AI writing may differ in how repetitive or varied their sentences, vocabulary, and punctuation patterns are. These characteristics provide a second signal that is different from the model-based detector.
+
+Human and AI writing may differ in how repetitive or varied their sentence lengths, vocabulary, and punctuation patterns are. These features provide a second signal that measures something different from the language-model detector.
 
 **What it can't see:**
-Stylometry cannot determine authorship. A human can intentionally write in a regular or formal style, while AI-generated text can be edited to change sentence lengths, vocabulary, and punctuation patterns.
+
+Stylometry cannot determine authorship or understand meaning. A human can intentionally write in a regular or formal style, while AI-generated text can be edited with different sentence lengths, vocabulary, punctuation, or typos to change the score.
 
 ### The combining rule
 
-<!-- Write the rule in words, then give the numbers. What happens when the two
-     signals disagree? -->
-
 **The rule:**
+
+The model signal and style signal are combined using an equal-weighted average. I chose equal weighting because the two signals measure different properties of the text. When they strongly disagree, the combined result moves toward the uncertain middle instead of allowing either signal alone to make a high-confidence accusation.
 
 **The numbers:**
 
-**Where it lives:** `scoring.py::combine_signals`
+- Model signal weight = `0.50`
+- Style signal weight = `0.50`
 
-<!-- ⚠️ The grader checks your code against that line. If your rule lives
-     somewhere else, say where. -->
+The calculation is:
+
+```text
+combined_score =
+    (0.50 × model_score)
+    +
+    (0.50 × style_score)
+```
+
+**Where it lives:** `scoring.py::combine_signals`
 
 **A case where my two signals split, and what my rule does with it:**
 
+One test produced a model score of `0.3636` and a style score of `0.2062`. The model signal was just outside the high-confidence human range, while the style signal was strongly human-like.
 
+Because I weight both signals equally, the combined score became `0.2849`, which produced the high-confidence human label.
 
 ---
 
 ## Label Variants
 
-<!-- The exact text of all three labels, as a reader would see them, and the
-     score range each covers.
-
-     Write them for someone who has never heard the word "threshold". -->
-
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| high-confidence human | 0.00 – 0.35 | This writing shows strong signals commonly associated with human-written text. |
+| unsure | 0.35 – 0.65 | The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI. |
+| high-confidence AI | 0.65 – 1.00 | This writing shows strong signals commonly associated with AI-generated text. |
 
 **Why I worded the "unsure" one this way:**
-<!-- It's the hardest of the three. It has to admit uncertainty without
-     sounding like an accusation, because the person reading it may well have
-     written every word themselves. -->
 
+The unsure label avoids accusing the writer when the signals do not agree strongly enough. It explains that the system is uncertain rather than claiming the text definitely came from either a person or AI.
 
+### Label reachability tests
+
+I deliberately tested examples that reached all three label variants.
+
+**High-confidence human**
+
+```text
+model_score:    0.3636
+style_score:    0.2062
+combined_score: 0.2849
+guess:          human
+```
+
+**Unsure**
+
+```text
+model_score:    0.5055
+style_score:    0.5631
+combined_score: 0.5343
+guess:          unsure
+```
+
+**High-confidence AI**
+
+```text
+model_score:    0.9872
+style_score:    0.7620
+combined_score: 0.8746
+guess:          ai
+```
+
+All three reader-facing labels were therefore reachable during testing.
 
 ---
 
 ## Sample Run
 
-<!-- One submission and one appeal, pasted as text: the request, the response,
-     and the log entries. -->
-
-**A submission**
-
-<!-- The response needs content_id, guess, confidence, label, AND both
-     signal scores - model_score and style_score. Unit 8's tools read those
-     two off the response, so leaving them out costs you next unit's
-     diagnostics. -->
+### A submission
 
 ```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
-  -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+curl.exe -X POST http://127.0.0.1:5000/submit -H "Content-Type: application/json" -d '{\"text\": \"Missed the bus again. Great. At 6:17 a.m. I was standing outside with one shoe half untied, coffee leaking through the lid, and my phone at 3% battery; somehow that felt like a summary of the whole morning. Then the driver actually stopped for me! I laughed, dropped a receipt, picked up the wrong one, and spent the ride wondering why I had written milk, batteries, coriander, and 27 on the back of it. Weird day.\", \"creator_id\": \"kiran\"}'
 ```
+
+Response:
 
 ```json
-
+{
+  "combined_score": 0.2849,
+  "confidence": 0.2849,
+  "content_id": "97bdfa38-15a1-432e-8359-8cfa5216283d",
+  "guess": "human",
+  "label": "This writing shows strong signals commonly associated with human-written text.",
+  "model_score": 0.3636,
+  "status": "decided",
+  "style_score": 0.2062
+}
 ```
 
-**An appeal**
+### An appeal
 
 ```bash
-$ curl -X POST http://127.0.0.1:5000/appeal \
-  -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+curl.exe -X POST http://127.0.0.1:5000/appeal -H "Content-Type: application/json" -d '{\"content_id\": \"97bdfa38-15a1-432e-8359-8cfa5216283d\", \"reasoning\": \"I would like this automated decision reviewed because detector results can be uncertain.\"}'
 ```
+
+Response:
 
 ```json
-
+{
+  "content_id": "97bdfa38-15a1-432e-8359-8cfa5216283d",
+  "message": "Your appeal has been recorded for review.",
+  "status": "under_review"
+}
 ```
 
-**What the log shows afterwards**
+### What the log shows afterwards
 
 ```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
+curl.exe "http://127.0.0.1:5000/log?limit=3"
 ```
 
-```json
+Response:
 
+```json
+{
+  "count": 3,
+  "entries": [
+    {
+      "combined_score": 0.4779,
+      "content_id": "4eb95430-7d5b-4f9d-82cd-8c2c7dff6072",
+      "creator_id": "kiran",
+      "guess": "unsure",
+      "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.",
+      "model_score": 0.4692,
+      "status": "decided",
+      "style_score": 0.4866,
+      "timestamp": "2026-11-04T01:27:25+00:00"
+    },
+    {
+      "combined_score": 0.2849,
+      "content_id": "97bdfa38-15a1-432e-8359-8cfa5216283d",
+      "creator_id": "kiran",
+      "guess": "human",
+      "label": "This writing shows strong signals commonly associated with human-written text.",
+      "model_score": 0.3636,
+      "status": "decided",
+      "style_score": 0.2062,
+      "timestamp": "2026-11-04T01:28:21+00:00"
+    },
+    {
+      "content_id": "97bdfa38-15a1-432e-8359-8cfa5216283d",
+      "creator_id": "kiran",
+      "event": "appeal",
+      "reasoning": "I would like this automated decision reviewed because detector results can be uncertain.",
+      "status": "under_review",
+      "timestamp": "2026-11-04T01:30:16+00:00"
+    }
+  ]
+}
 ```
 
 ---
 
 ## How I Used AI
 
-**Moment 1**
+### Moment 1
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- **What I asked for:** I asked for help debugging and implementing the `/submit` endpoint after my first version had an indentation error and initially only returned a hardcoded response.
+- **What came back:** AI explained the indentation issue and suggested a route structure that validates the request, creates a unique content ID, calls `detector.model_signal(text)`, and records the decision using `audit.log_decision(...)`.
+- **What I changed:** I corrected the route structure, added input validation, connected the real detector signal, generated UUID content IDs, and verified that decisions appeared through `GET /log`.
 
-**Moment 2**
+### Moment 2
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- **What I asked for:** I asked for help implementing the second stylometry signal and combining it with the model signal.
+- **What came back:** AI suggested measuring sentence-length variation, vocabulary diversity, and punctuation density, then combining the resulting style score with the model score using an equal-weighted average.
+- **What I changed:** I implemented and tested the three stylometry measures, kept the model and style weights at `0.50` each, connected `scoring.py::combine_signals`, added the three reader-facing labels, and tested inputs until all three labels were reachable.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
@@ -245,20 +314,26 @@ $ curl "http://127.0.0.1:5000/log?limit=3"
 **My limits:** ___ per minute, ___ per day
 
 **Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+<!--
+Think about two people: a real writer submitting their own work a few
+times an hour, and a script sending a thousand variations to map your
+thresholds. Your numbers have to be liveable for the first and hostile to
+the second.
+-->
+
+**What a caller counts as:**
+
+<!--
+Per address, or per creator_id? They fail differently — one script can
+look like a thousand callers, and one household can look like one.
+-->
 
 **The run of status codes when I pushed past it:**
 
 <!-- python run_attacks.py --flood 15 -->
 
-```
+```text
 
 ```
 
@@ -266,23 +341,18 @@ can look like one. -->
 
 ## Attack Run — Before
 
-<!-- Every attack with its outcome and a held-or-broke mark.
-     `run_attacks.py --label before` produces the table. -->
-
-
+<!--
+Every attack with its outcome and a held-or-broke mark.
+`run_attacks.py --label before` produces the table.
+-->
 
 **Ten audit log entries from the run**
-
-<!-- Choose entries that show the interesting failures, not the ten easiest. -->
 
 ```json
 
 ```
 
-**The single worst outcome** — the one I'd least want to explain to a writer
-whose work got caught by it:
-
-
+**The single worst outcome** — the one I'd least want to explain to a writer whose work got caught by it:
 
 ---
 
@@ -292,14 +362,13 @@ whose work got caught by it:
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. | | | | | |
+| 2. | | | | | |
+| 3. | | | | | |
+| 4. | | | | | |
+| 5. | | | | | |
 
-**Real output from one trial**, pasted as text, naming the file and function
-that produced it:
+**Real output from one trial**, pasted as text, naming the file and function that produced it:
 
 ```json
 
@@ -307,21 +376,27 @@ that produced it:
 
 **Diagnoses**
 
-<!-- For each miss AND each broken attack: the stage and the mechanism.
+<!--
+For each miss AND each broken attack: the stage and the mechanism.
 
-     Your service has five stages: the route, signal one, signal two, the
-     combining rule, and the label mapping.
+Your service has five stages:
+1. the route
+2. signal one
+3. signal two
+4. the combining rule
+5. the label mapping
 
-     Not a diagnosis:  "The evasion attacks got through."
-     A diagnosis:      "Four evasion inputs got through. All four had typos
-                        added to AI-generated text. My second signal measures
-                        word variety, and typos raise word variety — so it read
-                        them as more human. My combining rule weights that
-                        signal at 0.6, so it dragged the whole score down."
+Not a diagnosis:
+"The evasion attacks got through."
 
-     Look for a pattern. Five failures on one signal is one problem, not five. -->
+A diagnosis:
+"Four evasion inputs got through. All four had typos added to
+AI-generated text. My second signal measures word variety, and typos
+raise word variety — so it read them as more human. My combining rule
+weights that signal at 0.6, so it dragged the whole score down."
 
-
+Look for a pattern. Five failures on one signal is one problem, not five.
+-->
 
 ---
 
@@ -335,63 +410,62 @@ that produced it:
 
 <!-- Same format. `run_attacks.py --label after` -->
 
-
-
 **Did it help, and how do I know:**
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
-
-
+<!--
+Widening the unsure band usually fixes one problem and creates another.
+Reporting that trade honestly is worth full credit.
+-->
 
 ---
 
 ## What's Still Broken
 
-<!-- For each attack still getting through and each criterion still missed:
-     what you'd do, and why you stopped. -->
-
-
+<!--
+For each attack still getting through and each criterion still missed:
+what you'd do, and why you stopped.
+-->
 
 **The trade I'd make if this ran for real:**
 
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
-
-
+<!--
+Two sentences. Fewer wrong accusations means more AI text getting
+through. Say which way you'd go and WHO PAYS FOR IT.
+-->
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
-     SUBMISSION CHECKLIST — unit 7
+SUBMISSION CHECKLIST — unit 7
 
-       [ ] criteria.md has five numbered criteria, each naming a target
-       [ ] Each has a reason underneath
-       [ ] POST /submit returns content_id, guess, confidence, label,
-           model_score and style_score
-       [ ] Two signals that measure DIFFERENT things, each with a named blind spot
-       [ ] Three label variants, all reachable, written out in full
-       [ ] POST /appeal changes status and writes to the log
-       [ ] Signals and Scoring names scoring.py::combine_signals
-       [ ] Sample Run: a submission AND an appeal, as pasted text
-       [ ] At least four new commits
-       [ ] Repository URL submitted — WRITE IT DOWN
+[ ] criteria.md has five numbered criteria, each naming a target
+[ ] Each has a reason underneath
+[ ] POST /submit returns content_id, guess, confidence, label,
+    model_score and style_score
+[ ] Two signals that measure DIFFERENT things, each with a named blind spot
+[ ] Three label variants, all reachable, written out in full
+[ ] POST /appeal changes status and writes to the log
+[ ] Signals and Scoring names scoring.py::combine_signals
+[ ] Sample Run: a submission AND an appeal, as pasted text
+[ ] At least four new commits
+[ ] Repository URL submitted — WRITE IT DOWN
 
-     SUBMISSION CHECKLIST — unit 8
+SUBMISSION CHECKLIST — unit 8
 
-       [ ] Rate limiting on /submit, with your numbers justified
-       [ ] The pasted run of status codes showing 429
-       [ ] Audit log with all nine fields, recording rejections too
-       [ ] The attack set run IN FULL, every input with an outcome
-       [ ] Ten audit log entries pasted as text
-       [ ] Five criteria across three trials
-       [ ] A diagnosis for every miss and every broken attack — stage AND mechanism
-       [ ] One improvement, with Attack Run — After
-       [ ] What's Still Broken, including the production trade
-       [ ] At least four new commits
-       [ ] The SAME repository URL as last unit
+[ ] Rate limiting on /submit, with your numbers justified
+[ ] The pasted run of status codes showing 429
+[ ] Audit log with all nine fields, recording rejections too
+[ ] The attack set run IN FULL, every input with an outcome
+[ ] Ten audit log entries pasted as text
+[ ] Five criteria across three trials
+[ ] A diagnosis for every miss and every broken attack — stage AND mechanism
+[ ] One improvement, with Attack Run — After
+[ ] What's Still Broken, including the production trade
+[ ] At least four new commits
+[ ] The SAME repository URL as last unit
 
-     Do not delete and recreate this repository.
-     ═════════════════════════════════════════════════════════════════════ -->
+Do not delete and recreate this repository.
+
+═════════════════════════════════════════════════════════════════════ -->
 
 ---
 
