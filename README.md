@@ -340,11 +340,110 @@ Every attack with its outcome and a held-or-broke mark.
 **Ten audit log entries from the run**
 
 ```json
-
-```
+[
+  {
+    "combined_score": 0.3447,
+    "content_id": "f28ca1b6-1284-4409-bb6b-4fb0231e25d9",
+    "creator_id": "attacker_EV08",
+    "guess": "human",
+    "label": "This writing shows strong signals commonly associated with human-written text.",
+    "model_score": 0.2452,
+    "status": "decided",
+    "style_score": 0.4442,
+    "timestamp": "2026-11-11T01:40:49+00:00"
+  },
+  {
+    "combined_score": 0.6925,
+    "content_id": "3de7521b-10b2-4531-89a3-a026ad511cf8",
+    "creator_id": "attacker_FP03",
+    "guess": "ai",
+    "label": "This writing shows strong signals commonly associated with AI-generated text.",
+    "model_score": 0.8051,
+    "status": "decided",
+    "style_score": 0.5799,
+    "timestamp": "2026-11-11T01:40:51+00:00"
+  },
+  {
+    "combined_score": 0.7087,
+    "content_id": "656b5c73-fd65-46bf-b18f-ccc552516edc",
+    "creator_id": "attacker_FP05",
+    "guess": "ai",
+    "label": "This writing shows strong signals commonly associated with AI-generated text.",
+    "model_score": 0.8005,
+    "status": "decided",
+    "style_score": 0.617,
+    "timestamp": "2026-11-11T01:40:52+00:00"
+  },
+  {
+    "combined_score": 0.4137,
+    "content_id": "03cf37a0-35f6-4bec-a3fc-a9e22fbacbbd",
+    "creator_id": "attacker_PI05",
+    "guess": "unsure",
+    "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.",
+    "model_score": 0.6401,
+    "status": "decided",
+    "style_score": 0.1873,
+    "timestamp": "2026-11-11T01:40:54+00:00"
+  },
+  {
+    "creator_id": "attacker_MF01",
+    "event": "rejected",
+    "reason": "invalid_text",
+    "status": "rejected",
+    "timestamp": "2026-11-11T01:40:55+00:00"
+  },
+  {
+    "combined_score": 0.1666,
+    "content_id": "18131b5f-7833-407c-ba9b-11710c927d9e",
+    "creator_id": "attacker_MF03",
+    "guess": "human",
+    "label": "This writing shows strong signals commonly associated with human-written text.",
+    "model_score": 0.0,
+    "status": "decided",
+    "style_score": 0.3333,
+    "timestamp": "2026-11-11T01:40:55+00:00"
+  },
+  {
+    "combined_score": 0.8318,
+    "content_id": "c21ba6be-31b6-4225-8919-4d96a7c11d60",
+    "creator_id": "attacker_MF06",
+    "guess": "ai",
+    "label": "This writing shows strong signals commonly associated with AI-generated text.",
+    "model_score": 0.9969,
+    "status": "decided",
+    "style_score": 0.6667,
+    "timestamp": "2026-11-11T01:40:57+00:00"
+  },
+  {
+    "combined_score": 0.8816,
+    "content_id": "ec72b834-6043-422e-bf91-6d86b914fe29",
+    "creator_id": "attacker_MF08",
+    "guess": "ai",
+    "label": "This writing shows strong signals commonly associated with AI-generated text.",
+    "model_score": 0.9876,
+    "status": "decided",
+    "style_score": 0.7756,
+    "timestamp": "2026-11-11T01:40:59+00:00"
+  },
+  {
+    "creator_id": "unknown",
+    "event": "rejected",
+    "reason": "invalid_json",
+    "status": "rejected",
+    "timestamp": "2026-11-11T01:40:59+00:00"
+  },
+  {
+    "creator_id": "attacker_flood",
+    "event": "rejected",
+    "limit": "10 per 1 minute",
+    "reason": "rate_limited",
+    "status": "rejected",
+    "timestamp": "2026-11-11T01:41:01+00:00"
+  }
+]
 
 **The single worst outcome** — the one I'd least want to explain to a writer whose work got caught by it:
-
+The worst outcome was FP03. The input was genuine human writing from a non-native English speaker, but the system labeled it as AI with a combined score of 0.6925. Signal one was especially high at 0.8051, while signal two was 0.5799. I consider this worse than simply missing AI-generated text because it could wrongly accuse a real writer of using AI.
 ---
 
 ## Run Log and Verdicts
