@@ -311,29 +311,20 @@ Response:
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** 10 per minute, 200 per day
 
 **Why those numbers and not others:**
 
-<!--
-Think about two people: a real writer submitting their own work a few
-times an hour, and a script sending a thousand variations to map your
-thresholds. Your numbers have to be liveable for the first and hostile to
-the second.
--->
+I chose 10 submissions per minute because a normal writer is unlikely to need more than 10 submissions in one minute, while an automated script probing many variations can reach that limit quickly. I chose 200 submissions per day so legitimate repeated use is still possible without allowing unlimited automated testing.
 
 **What a caller counts as:**
 
-<!--
-Per address, or per creator_id? They fail differently — one script can
-look like a thousand callers, and one household can look like one.
--->
+When a valid `creator_id` is provided, requests are counted against that creator. If a usable creator ID is missing, the service falls back to the caller's network address.
 
 **The run of status codes when I pushed past it:**
 
-<!-- python run_attacks.py --flood 15 -->
-
 ```text
+200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
 
 ```
 

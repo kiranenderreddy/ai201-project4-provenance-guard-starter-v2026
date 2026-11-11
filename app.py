@@ -151,7 +151,7 @@ def health():
 # ── YOU BUILD THIS ────────────────────────────────────────────────────────────
 
 @app.post("/submit")
-# @limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
+@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
 def submit():
     """
     Take submitted text, run both signals,
@@ -163,7 +163,13 @@ def submit():
 
     payload = request.get_json(silent=True)
 
+    # Invalid JSON/body
     if not isinstance(payload, dict):
+        audit.log_rejection(
+            creator_id="unknown",
+            reason="invalid_json"
+        )
+
         return jsonify({
             "error": "invalid_json",
             "message": "Request body must be a JSON object."
@@ -172,13 +178,31 @@ def submit():
     text = payload.get("text", "")
     creator_id = payload.get("creator_id", "")
 
+    # Missing or empty text
     if not isinstance(text, str) or not text.strip():
+        safe_creator_id = (
+            creator_id
+            if isinstance(creator_id, str) and creator_id.strip()
+            else "unknown"
+        )
+
+        audit.log_rejection(
+            creator_id=safe_creator_id,
+            reason="invalid_text"
+        )
+
         return jsonify({
             "error": "invalid_text",
             "message": "text is required and cannot be empty."
         }), 400
 
+    # Missing or invalid creator_id
     if not isinstance(creator_id, str) or not creator_id.strip():
+        audit.log_rejection(
+            creator_id="unknown",
+            reason="invalid_creator_id"
+        )
+
         return jsonify({
             "error": "invalid_creator_id",
             "message": "creator_id is required."
@@ -198,9 +222,10 @@ def submit():
         style_score
     )
 
-    # Temporary guess until Milestone 5 label mapping
+    # Convert score into reader-facing label
     guess, label = scoring.score_to_label(combined_score)
 
+    # Record the decision
     audit.log_decision(
         content_id=content_id,
         creator_id=creator_id,
@@ -222,6 +247,7 @@ def submit():
         "combined_score": combined_score,
         "status": "decided"
     })
+
 
 @app.post("/appeal")
 def appeal():
