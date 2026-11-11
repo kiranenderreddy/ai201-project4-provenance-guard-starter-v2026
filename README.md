@@ -602,31 +602,152 @@ Mechanism: The route accepts the text without checking whether the detector and 
 The system therefore treated unsupported-language behavior as evidence of AI authorship.
 ---
 The Improvement
-Status: not run yet.
-What I plan to change:
-My one allowed improvement will be chosen from the diagnoses above and then measured against both the staff attack set and my five criteria. I will not silently change multiple signals, weights, thresholds, or labels before the after-run.
-Which diagnosis pointed at it:
-The strongest safety problem is the false-positive pattern in FP02–FP07 and the Criterion 2 score-spread miss. Signal one frequently gives high scores to legitimate human-style writing, and the current 50/50 combination lets that score contribute directly to a high-confidence AI result.
-Attack Run — After
-TODO after making the single improvement:
-```powershell
-python run_attacks.py --set attack_set\attack_set --label after
-python run_eval.py --label after
+What I changed:
+I made one change in `config.py`.
+Before:
+```python
+AI_THRESHOLD = 0.65
 ```
+After:
+```python
+AI_THRESHOLD = 0.72
+```
+I did not change signal one, signal two, the 0.50/0.50 combining weights, the human threshold, or the input-validation rules.
+Which diagnosis pointed at it:
+The baseline attack run showed a serious false-positive problem. FP02 through FP07 were genuine human-writing examples, but all six received the high-confidence AI label.
+Their combined scores were approximately between `0.676` and `0.709`. Because my original AI threshold was `0.65`, those human-writing examples crossed directly into the strongest AI label.
+I therefore raised the AI threshold from `0.65` to `0.72`. This widens the unsure range so the system requires stronger evidence before making a high-confidence AI claim.
+The tradeoff is intentional: some AI-generated writing between `0.65` and `0.72` may now receive `unsure`, but reducing false accusations against real writers is more important for this system.
+Attack Run — After
+Result file:
+`results/attack_run_2026-11-10_2111_after.md`
+ID	Family	Result	Verdict
+EV01	evasion	unsure	BROKE
+EV02	evasion	unsure	BROKE
+EV03	evasion	unsure	BROKE
+EV04	evasion	unsure	BROKE
+EV05	evasion	unsure	BROKE
+EV06	evasion	unsure	BROKE
+EV07	evasion	unsure	BROKE
+EV08	evasion	human	BROKE
+EV09	evasion	unsure	BROKE
+EV10	evasion	ai	HELD
+FP01	false_positive	unsure	HELD
+FP02	false_positive	unsure	HELD
+FP03	false_positive	unsure	HELD
+FP04	false_positive	unsure	HELD
+FP05	false_positive	unsure	HELD
+FP06	false_positive	unsure	HELD
+FP07	false_positive	unsure	HELD
+FP08	false_positive	human	HELD
+PI01	prompt_injection	unsure	HELD
+PI02	prompt_injection	human	HELD
+PI03	prompt_injection	unsure	HELD
+PI04	prompt_injection	unsure	HELD
+PI05	prompt_injection	unsure	HELD
+PI06	prompt_injection	unsure	HELD
+MF01	malformed	400	HELD
+MF02	malformed	500 crash	BROKE
+MF03	malformed	accepted / human	BROKE
+MF04	malformed	accepted / human	BROKE
+MF05	malformed	accepted / ai	BROKE
+MF06	malformed	accepted / ai	BROKE
+MF07	malformed	accepted / ai	BROKE
+MF08	malformed	accepted / ai	BROKE
+RQ01	malformed request	400	HELD
+RQ02	malformed request	400	HELD
+RQ03	malformed request	400	HELD
+RQ04	malformed request	400	HELD
+RQ05	malformed request	400	HELD
+RQ06	malformed request	400	HELD
+RQ07	malformed request	400	HELD
+RQ08	malformed request	400	HELD
+RQ09	malformed request	400	HELD
+RQ10	malformed request	400	HELD
+RQ11	malformed request	400	HELD
+RQ12	malformed request	400	HELD
+FL01_01	flood_same_creator	200	HELD
+FL01_02	flood_same_creator	200	HELD
+FL01_03	flood_same_creator	200	HELD
+FL01_04	flood_same_creator	200	HELD
+FL01_05	flood_same_creator	200	HELD
+FL01_06	flood_same_creator	200	HELD
+FL01_07	flood_same_creator	200	HELD
+FL01_08	flood_same_creator	200	HELD
+FL01_09	flood_same_creator	200	HELD
+FL01_10	flood_same_creator	200	HELD
+FL01_11	flood_same_creator	429	HELD
+FL01_12	flood_same_creator	429	HELD
+Before: 34 HELD, 22 BROKE  
+After: 40 HELD, 16 BROKE
+The improvement fixed six staff false-positive attacks: FP02, FP03, FP04, FP05, FP06, and FP07 all changed from the high-confidence `ai` label to `unsure`.
+The strong AI case EV10 still remained `ai`, so increasing the threshold did not make every AI-like case disappear into the unsure range.
+Acceptance Criteria — After
+Result file:
+`results/run_2026-11-10_2112_after.md`
+Criterion	Target	Run 1	Run 2	Run 3	Verdict
+1. False positives	At most 1 of 10 human samples labeled AI	0/10	0/10	0/10	MET
+2. Score spread	AI average at least 0.20 higher than human average	-0.054 gap	-0.054 gap	-0.054 gap	MISSED
+3. Label coverage	All 3 labels reachable within ≤6 inputs	3/3	3/3	3/3	MET
+4. Appeal path	3/3 appeals become `under_review` and are logged	3/3	3/3	3/3	MET
+5. Bad input	3/3 invalid requests return controlled 4xx	3/3	3/3	3/3	MET
 Did it help, and how do I know:
-TODO — fill from the actual after-run. I will compare the number and type of broken attacks, the false-positive behavior, and the five criterion results rather than claiming improvement without measurement.
+Yes.
+Before the threshold change, six staff false-positive cases, FP02 through FP07, received the high-confidence AI label. After increasing the AI threshold to `0.72`, all six moved into the `unsure` range.
+My false-positive evaluation also improved from `1/10` high-confidence AI labels to `0/10`.
+The total staff attack result improved from `34 HELD / 22 BROKE` to `40 HELD / 16 BROKE`.
+Criterion 3 still reached all three labels, Criterion 4 still passed every appeal test, and Criterion 5 still returned controlled `400` responses for all three invalid inputs.
+Criterion 2 did not improve. That is expected because changing the AI threshold only changes the final label mapping. It does not change `model_score`, `style_score`, or `combined_score`.
+The AI group therefore still averaged approximately `0.557`, while the human group averaged approximately `0.611`, leaving the score-spread gap at approximately `-0.054`.
+The improvement therefore helped the false-positive safety problem, but it did not repair the underlying score separation problem.
 ---
 What's Still Broken
-Status: final after-run still pending.
-The baseline already shows several remaining limitations that one improvement is unlikely to solve completely:
-edited AI text can evade both signals,
-formal human writing can be over-scored as AI,
-very short text can crash the detector,
-unsupported or non-semantic text can reach scoring,
-unsupported scripts can receive misleading scores.
-After the one allowed improvement, I will list which of these still reproduce and what additional change would be required.
+Evasion attacks EV01–EV09
+EV01 through EV09 still evade the strongest AI label.
+These attacks manipulate properties that my signals depend on, including typos, sentence structure, quotations, unusual vocabulary, punctuation, text length, and human editing.
+A future improvement would require a signal that is more robust to paraphrasing and deliberate editing rather than depending mainly on language-model predictability and simple stylometric measurements.
+I stopped here because Unit 8 asks for one measured improvement. Changing the detector or stylometry implementation would be a second improvement.
+MF02 — one-character input
+MF02 still causes a `500` error.
+The route checks whether `text` is present and non-empty, but a single character passes that validation. Signal one then attempts to score it and raises:
+```text
+ValueError: Text is too short to score — a few sentences at least.
+```
+A future fix would add minimum usable-text validation before either signal runs and return a controlled `400` response instead of allowing the detector exception to become a server error.
+I did not add that fix because it would be another improvement beyond the one threshold change measured in this unit.
+MF03–MF06 and MF08 — malformed content accepted
+Control-character text, punctuation-only text, a very long single word, emoji-only text, and extremely large text are still accepted because they are technically non-empty strings.
+A future version should add route-level validation for meaningful text content, reasonable length limits, and supported input before calling the detector.
+MF07 — unsupported/right-to-left script
+The right-to-left-script attack is still accepted and receives a very high AI score.
+The system currently has no language-support check, so unsupported-language behavior can incorrectly be interpreted as evidence that text was AI-generated.
+A production version should identify whether the submitted language/script is supported before running the authorship detector.
+Criterion 2 — Score spread
+Criterion 2 remains MISSED after the improvement.
+The AI samples average approximately `0.557`, while the human samples average approximately `0.611`.
+The observed gap is:
+```text
+0.557 - 0.611 = -0.054
+```
+instead of the required:
+```text
+>= +0.20
+```
+The threshold improvement cannot change this because the criterion is based on the combined score before label mapping.
+Fixing this problem would require changing signal one, signal two, or the combining rule. That would be a separate improvement, so I stopped after the single measured threshold change.
+What I would fix next
+If I continued the project, my next change would be route-level input validation.
+I would reject:
+text that is too short for the detector,
+punctuation-only or control-character input,
+emoji-only input,
+extremely large input,
+input without enough normal words or sentences,
+unsupported languages/scripts when the detector cannot score them reliably.
+After that, I would separately evaluate the model signal and stylometry signal on a larger labeled set before changing their weights.
 The trade I'd make if this ran for real:
-If this system were used for real people, I would favor reducing false accusations even if that allowed more AI-generated text to land in the unsure range or pass through. The cost of that choice would be lower detection recall, but the alternative places the cost on legitimate writers who may be incorrectly accused by a probabilistic detector.
+If this system were used for real people, I would continue to favor fewer false accusations even if that allows more AI-generated text to receive an `unsure` result or pass through.
+That choice lowers detection recall, so the platform accepts the cost of missing some AI-generated writing rather than forcing legitimate writers to bear the more serious cost of being incorrectly accused.
 ---
 Submission Checklist
 Unit 7
@@ -647,9 +768,9 @@ Unit 8
 [x] Ten audit log entries pasted as text
 [x] Five criteria run across three trials
 [x] Baseline diagnoses written for the criterion miss and broken attack patterns
-[ ] One improvement implemented and measured
-[ ] Attack Run — After added
-[ ] What's Still Broken updated from the after-run
+[x] One improvement implemented and measured
+[x] Attack Run — After added
+[x] What's Still Broken updated from the after-run
 [ ] At least four new Unit 8 commits
 [ ] Same repository URL submitted
 ---
