@@ -24,13 +24,15 @@ Routes:
     GET  /health      is the service up, and is the model loaded
 """
 
+import time
 import uuid
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, g
 
 import audit
 import config
 import input_validation
+import instrumentation
 
 app = Flask(__name__)
 
@@ -49,6 +51,59 @@ app = Flask(__name__)
 # The storage backend is preconfigured, which stops Flask-Limiter printing a
 # warning on every start. In-memory is right for one laptop and wrong for
 # anything real — a restart forgets every count.
+
+# ── CAPSTONE STRUCTURED INSTRUMENTATION ──────────────────────────────────────
+
+@app.before_request
+def start_capstone_run():
+    """
+    Start timing every POST /submit request and capture
+    a structured summary of what came in.
+    """
+
+    if request.method == "POST" and request.path == "/submit":
+        g.capstone_start = time.perf_counter()
+
+        payload = request.get_json(silent=True)
+
+        g.capstone_input = instrumentation.summarize_input(
+            payload
+        )
+
+
+@app.after_request
+def finish_capstone_run(response):
+    """
+    Record the input, output, HTTP status, and duration
+    for every POST /submit request.
+    """
+
+    if (
+        request.method == "POST"
+        and request.path == "/submit"
+        and hasattr(g, "capstone_start")
+    ):
+        duration_ms = (
+            time.perf_counter() - g.capstone_start
+        ) * 1000
+
+        output_data = response.get_json(silent=True)
+
+        if output_data is None:
+            output_data = {
+                "body_preview": response.get_data(
+                    as_text=True
+                )[:500]
+            }
+
+        instrumentation.write_run(
+            input_data=g.capstone_input,
+            output_data=output_data,
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+        )
+
+    return response
 
 class _LimiterOff:
     """
