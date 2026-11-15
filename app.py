@@ -30,6 +30,7 @@ from flask import Flask, jsonify, request
 
 import audit
 import config
+import input_validation
 
 app = Flask(__name__)
 
@@ -63,6 +64,7 @@ class _LimiterOff:
 
 
 limiter = _LimiterOff()
+
 if config.RATE_LIMITING_ENABLED:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
@@ -76,15 +78,22 @@ if config.RATE_LIMITING_ENABLED:
         matters: one script can look like a thousand callers, and one household
         can look like one.
         """
+
         payload = request.get_json(silent=True)
+
         # A body that parses as JSON but isn't an object — a bare list or
         # string — has no .get. Without this guard the key function raises
-        # BEFORE the route runs, and a malformed request becomes a 500 that
-        # looks like your handler crashed when your handler never ran.
+        # BEFORE the route runs.
         if not isinstance(payload, dict):
             return get_remote_address()
+
         creator = payload.get("creator_id")
-        return creator if isinstance(creator, str) and creator.strip() else get_remote_address()
+
+        return (
+            creator
+            if isinstance(creator, str) and creator.strip()
+            else get_remote_address()
+        )
 
     limiter = Limiter(
         key_func=rate_limit_key,
@@ -97,17 +106,19 @@ if config.RATE_LIMITING_ENABLED:
     def rate_limited(exc):
         """
         A rejected request still leaves a trace.
-
-        ⚠️ An attack that shows up only as an absence is one you'll never find.
         """
+
         payload = request.get_json(silent=True)
+
         if not isinstance(payload, dict):
             payload = {}
+
         audit.log_rejection(
             creator_id=payload.get("creator_id", "unknown"),
             reason="rate_limited",
             limit=str(exc.description),
         )
+
         return jsonify({
             "error": "rate_limited",
             "message": "Too many submissions. Try again shortly.",
@@ -123,9 +134,11 @@ def ping():
     Everything a route needs, in six lines.
 
     JSON arrives as a dict. You pull things out of it. You return a dict and
-    the framework turns it into a response. That's the whole idea.
+    the framework turns it into a response.
     """
+
     payload = request.get_json(silent=True) or {}
+
     return jsonify({
         "ok": True,
         "you_sent": payload.get("message"),
@@ -136,9 +149,11 @@ def ping():
 @app.get("/health")
 def health():
     """Is the service up, and has the model been downloaded yet?"""
+
     import detector
 
     loaded = detector._model is not None
+
     return jsonify({
         "ok": True,
         "detector_model": config.DETECTOR_MODEL,
@@ -148,23 +163,28 @@ def health():
     })
 
 
-# ── YOU BUILD THIS ────────────────────────────────────────────────────────────
+# ── SUBMISSION ROUTE ──────────────────────────────────────────────────────────
 
 @app.post("/submit")
-@limiter.limit(f"{config.RATE_LIMIT_PER_MINUTE}/minute;{config.RATE_LIMIT_PER_DAY}/day")
+@limiter.limit(
+    f"{config.RATE_LIMIT_PER_MINUTE}/minute;"
+    f"{config.RATE_LIMIT_PER_DAY}/day"
+)
 def submit():
     """
-    Take submitted text, run both signals,
+    Take submitted text, validate it, run both signals,
     combine them, log the decision, and return the result.
     """
+
     import detector
     import stylometry
     import scoring
 
     payload = request.get_json(silent=True)
 
-    # Invalid JSON/body
+    # ── Invalid JSON/body ─────────────────────────────────────────────────────
     if not isinstance(payload, dict):
+
         audit.log_rejection(
             creator_id="unknown",
             reason="invalid_json"
@@ -175,11 +195,14 @@ def submit():
             "message": "Request body must be a JSON object."
         }), 400
 
+
     text = payload.get("text", "")
     creator_id = payload.get("creator_id", "")
 
-    # Missing or empty text
+
+    # ── Missing or empty text ─────────────────────────────────────────────────
     if not isinstance(text, str) or not text.strip():
+
         safe_creator_id = (
             creator_id
             if isinstance(creator_id, str) and creator_id.strip()
@@ -196,8 +219,10 @@ def submit():
             "message": "text is required and cannot be empty."
         }), 400
 
-    # Missing or invalid creator_id
+
+    # ── Missing or invalid creator_id ─────────────────────────────────────────
     if not isinstance(creator_id, str) or not creator_id.strip():
+
         audit.log_rejection(
             creator_id="unknown",
             reason="invalid_creator_id"
@@ -208,13 +233,41 @@ def submit():
             "message": "creator_id is required."
         }), 400
 
+
+    # ── CAPSTONE FAILURE-HARDENING VALIDATION ─────────────────────────────────
+    #
+    # Stop unsupported text BEFORE it reaches GPT-2 or stylometry.
+    #
+    is_valid, error_code, error_message = (
+        input_validation.validate_text_for_scoring(text)
+    )
+
+    if not is_valid:
+
+        audit.log_rejection(
+            creator_id=creator_id,
+            reason=error_code,
+            input_length=len(text)
+        )
+
+        return jsonify({
+            "error": error_code,
+            "message": error_message
+        }), 400
+
+
+    # ── Valid submission ──────────────────────────────────────────────────────
+
     content_id = str(uuid.uuid4())
+
 
     # Signal one
     model_score = detector.model_signal(text)
 
+
     # Signal two
     style_score = stylometry.style_signal(text)
+
 
     # Combine both signals
     combined_score = scoring.combine_signals(
@@ -222,8 +275,12 @@ def submit():
         style_score
     )
 
+
     # Convert score into reader-facing label
-    guess, label = scoring.score_to_label(combined_score)
+    guess, label = scoring.score_to_label(
+        combined_score
+    )
+
 
     # Record the decision
     audit.log_decision(
@@ -237,6 +294,7 @@ def submit():
         status="decided"
     )
 
+
     return jsonify({
         "content_id": content_id,
         "guess": guess,
@@ -249,6 +307,8 @@ def submit():
     })
 
 
+# ── APPEAL ROUTE ──────────────────────────────────────────────────────────────
+
 @app.post("/appeal")
 def appeal():
     """
@@ -257,42 +317,67 @@ def appeal():
 
     payload = request.get_json(silent=True)
 
+
     if not isinstance(payload, dict):
+
         return jsonify({
             "error": "invalid_json",
             "message": "Request body must be a JSON object."
         }), 400
 
-    content_id = payload.get("content_id", "")
-    reasoning = payload.get("reasoning", "")
+
+    content_id = payload.get(
+        "content_id",
+        ""
+    )
+
+    reasoning = payload.get(
+        "reasoning",
+        ""
+    )
+
 
     if not content_id:
+
         return jsonify({
             "error": "missing_content_id",
             "message": "content_id is required."
         }), 400
 
+
     if not reasoning:
+
         return jsonify({
             "error": "missing_reasoning",
             "message": "reasoning is required."
         }), 400
 
-    existing_entries = audit.entries_for(content_id)
+
+    existing_entries = audit.entries_for(
+        content_id
+    )
+
 
     if not existing_entries:
+
         return jsonify({
             "error": "content_not_found",
             "message": "No submission was found for that content_id."
         }), 404
 
-    creator_id = existing_entries[0].get("creator_id", "unknown")
+
+    creator_id = existing_entries[0].get(
+        "creator_id",
+        "unknown"
+    )
+
 
     audit.log_appeal(
         content_id=content_id,
         creator_id=creator_id,
         reasoning=reasoning
     )
+
 
     return jsonify({
         "content_id": content_id,
@@ -301,7 +386,7 @@ def appeal():
     })
 
 
-# ── Already works ─────────────────────────────────────────────────────────────
+# ── AUDIT LOG ─────────────────────────────────────────────────────────────────
 
 @app.get("/log")
 def get_log():
@@ -309,28 +394,73 @@ def get_log():
     The audit log, most recent last.
 
         curl "http://127.0.0.1:5000/log?limit=10"
-
-    You need this in unit 8 to paste entries into your README, and you need it
-    now to see whether your logging is actually working.
     """
-    limit = request.args.get("limit", type=int)
-    entries = audit.read_entries(limit=limit)
-    return jsonify({"count": len(entries), "entries": entries})
 
+    limit = request.args.get(
+        "limit",
+        type=int
+    )
+
+    entries = audit.read_entries(
+        limit=limit
+    )
+
+    return jsonify({
+        "count": len(entries),
+        "entries": entries
+    })
+
+
+# ── START SERVICE ──────────────────────────────────────────────────────────────
 
 def main():
-    print(f"Provenance Guard on http://{config.HOST}:{config.PORT}")
-    print(f"  detector model:  {config.DETECTOR_MODEL}")
-    print(f"  rate limiting:   {'ON' if config.RATE_LIMITING_ENABLED else 'off (unit 8)'}")
-    print(f"  audit log:       {config.AUDIT_LOG}")
+
+    print(
+        f"Provenance Guard on "
+        f"http://{config.HOST}:{config.PORT}"
+    )
+
+    print(
+        f"  detector model:  "
+        f"{config.DETECTOR_MODEL}"
+    )
+
+    print(
+        f"  rate limiting:   "
+        f"{'ON' if config.RATE_LIMITING_ENABLED else 'off (unit 8)'}"
+    )
+
+    print(
+        f"  audit log:       "
+        f"{config.AUDIT_LOG}"
+    )
+
     print()
+
     print("Check it's alive:")
-    print(f'  curl -X POST http://{config.HOST}:{config.PORT}/ping \\')
-    print('    -H "Content-Type: application/json" \\')
-    print("    -d '{\"message\": \"hello\"}'")
+
+    print(
+        f'  curl -X POST '
+        f'http://{config.HOST}:{config.PORT}/ping \\'
+    )
+
+    print(
+        '    -H "Content-Type: application/json" \\'
+    )
+
+    print(
+        "    -d '{\"message\": \"hello\"}'"
+    )
+
     print()
-    # debug=True hands out an interactive debugger, so it's local-only — see config.py
-    app.run(host=config.HOST, port=config.PORT, debug=config.DEBUG)
+
+    # debug=True hands out an interactive debugger,
+    # so it's local-only — see config.py
+    app.run(
+        host=config.HOST,
+        port=config.PORT,
+        debug=config.DEBUG
+    )
 
 
 if __name__ == "__main__":
