@@ -306,3 +306,29 @@ is evidence, and the entries you paste into your README are what unit 8 grades.
 
 **Do not delete and recreate this repository.** You submit the same URL both
 units.
+
+---
+
+## Capstone Run Path
+
+For the Unit 9 Capstone, this project uses **Path B — local with logs**.
+
+Provenance Guard runs a GPT-2 model locally, so local execution is more appropriate than a small free hosting environment.
+
+### Environment
+
+Tested environment:
+
+- Operating system: Windows
+- Python: 3.13.15
+- Virtual environment: Python `venv`
+- Detector model: `gpt2`
+- GPT-2 local cache size observed on this machine: 550,959,901 bytes
+- No external model API key is required
+
+### Dependencies
+
+Install the project dependencies with:
+
+```powershell
+python -m pip install -r requirements.txt
