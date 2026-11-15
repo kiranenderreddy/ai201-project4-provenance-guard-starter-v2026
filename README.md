@@ -793,20 +793,19 @@ I chose **Shape B — Harden against failure**.
 
 The new capability is a failure-hardening layer for `POST /submit`.
 
-The extension will handle cases such as:
+The extension handles cases such as:
 
 - text that is too short for the detector,
 - punctuation-only input,
 - control-character input,
 - emoji-only or non-semantic input,
 - excessively large input,
+- unsupported scripts,
 - other text that cannot be meaningfully scored.
 
-Instead of allowing these inputs to crash the detector or receive misleading authorship labels, the route will return controlled responses and record the failure in the structured log.
+Instead of allowing these inputs to crash the detector or receive misleading authorship labels, the route returns controlled responses and records the failure in the structured log.
 
-**Out of Scope**
-
-For this capstone:
+Out of scope for this capstone:
 
 - I am not replacing the GPT-2 detector.
 - I am not changing the stylometry algorithm.
@@ -815,5 +814,157 @@ For this capstone:
 - I am not adding another AI-detection model.
 - I am not rebuilding the interface.
 - I am not starting a new project or repository.
----
-📖 How to run this project: RUNNING.md
+
+**Running It**
+
+This capstone uses **Path B — local with logs**.
+
+The exact startup command, environment requirements, Python version, dependencies, model information, valid request example, and failure-path example are documented in [RUNNING.md](RUNNING.md).
+
+The tested environment uses:
+
+- Windows
+- Python 3.13.15
+- Python virtual environment
+- local GPT-2 detector model
+- no external model API key
+
+The observed GPT-2 cache size on this machine was:
+
+```text
+550,959,901 bytes
+```
+
+From the repository root, the service starts with:
+
+```powershell
+python app.py
+```
+
+The service runs locally at:
+
+```text
+http://127.0.0.1:5000
+```
+
+A normal request to `POST /submit` returns fields including:
+
+```text
+content_id
+guess
+confidence
+label
+model_score
+style_score
+combined_score
+status
+```
+
+The failure-hardening layer validates input before the detector and stylometry signals run.
+
+For example, a one-character submission now returns a controlled `400` response instead of the `500` detector crash observed during Unit 8 testing.
+
+**Instrumentation**
+
+Capstone runs are written as structured JSON records to:
+
+```text
+logs/capstone_runs.jsonl
+```
+
+Each record contains:
+
+- `timestamp`
+- structured `input`
+- structured `output`
+- HTTP `status_code`
+- end-to-end `duration_ms`
+
+The input portion records the creator ID, a bounded text preview, total text length, and whether the preview was truncated.
+
+The output portion records either the normal Provenance Guard decision or the controlled rejection response.
+
+Both successful and rejected requests are logged.
+
+Below is a real extract from the capstone session containing ten measured successful requests and one rejected request:
+
+```json
+{"timestamp": "2026-11-15T22:52:27.186480+00:00", "input": {"creator_id": "capstone_cost_01", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "d1d3051c-4dfb-4d47-9af8-31304e18cbf6", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 9363.109}
+{"timestamp": "2026-11-15T22:52:27.387214+00:00", "input": {"creator_id": "capstone_cost_02", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "e49fbcdb-cc29-48c8-93b1-132e892f7447", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 180.013}
+{"timestamp": "2026-11-15T22:52:27.552526+00:00", "input": {"creator_id": "capstone_cost_03", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "44a0e3b7-d9d8-42eb-b6dd-c282ed2b4d86", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 153.763}
+{"timestamp": "2026-11-15T22:52:27.756978+00:00", "input": {"creator_id": "capstone_cost_04", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "6fef76e7-343f-49c7-959b-7e43c902def4", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 191.7}
+{"timestamp": "2026-11-15T22:52:27.949042+00:00", "input": {"creator_id": "capstone_cost_05", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "9dfff2b4-876c-4cc8-807f-949fd7b31261", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 178.931}
+{"timestamp": "2026-11-15T22:52:28.161179+00:00", "input": {"creator_id": "capstone_cost_06", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "2d002747-9342-43b6-a66b-adba184b80aa", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 196.265}
+{"timestamp": "2026-11-15T22:52:28.348521+00:00", "input": {"creator_id": "capstone_cost_07", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "0a62354d-a420-4b7b-8334-51f8f63cc499", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 172.351}
+{"timestamp": "2026-11-15T22:52:28.558428+00:00", "input": {"creator_id": "capstone_cost_08", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "6fb2a852-df50-48f1-97e3-f756ed26f567", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 196.769}
+{"timestamp": "2026-11-15T22:52:28.756525+00:00", "input": {"creator_id": "capstone_cost_09", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "a5a7ed8f-9928-4a09-954b-c55d9a136e01", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 183.634}
+{"timestamp": "2026-11-15T22:52:28.948981+00:00", "input": {"creator_id": "capstone_cost_10", "text_preview": "This is a normal piece of writing with enough words for the detector to process correctly.", "text_length": 90, "text_truncated": false}, "output": {"combined_score": 0.4474, "confidence": 0.4474, "content_id": "0b988722-2cb0-4bc8-aade-140c85b05355", "guess": "unsure", "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.", "model_score": 0.2744, "status": "decided", "style_score": 0.6204}, "status_code": 200, "duration_ms": 177.496}
+{"timestamp": "2026-11-15T22:52:38.621313+00:00", "input": {"creator_id": "capstone_failure_log", "text_preview": "a", "text_length": 1, "text_truncated": false}, "output": {"error": "non_semantic_text", "message": "text must contain enough written language to be scored."}, "status_code": 400, "duration_ms": 5.963}
+```
+
+The final entry demonstrates the failure path.
+
+A one-character input was rejected with HTTP `400` in `5.963 ms` and still produced a structured run record.
+
+This means failures remain observable rather than disappearing when a request is rejected.
+
+**What It Costs**
+
+Provenance Guard does not call a paid model API.
+
+The measurable per-run cost for this capstone is therefore local compute time.
+
+I measured ten consecutive real requests through `POST /submit` using the structured `duration_ms` field written by the capstone instrumentation.
+
+The measured durations were:
+
+| Run | Duration |
+|---|---:|
+| 1 | 9363.109 ms |
+| 2 | 180.013 ms |
+| 3 | 153.763 ms |
+| 4 | 191.700 ms |
+| 5 | 178.931 ms |
+| 6 | 196.265 ms |
+| 7 | 172.351 ms |
+| 8 | 196.769 ms |
+| 9 | 183.634 ms |
+| 10 | 177.496 ms |
+
+The average across all ten measured requests was:
+
+```text
+1099.403 ms
+= 1.099 seconds per run
+```
+
+The first measured request was substantially slower at:
+
+```text
+9363.109 ms
+```
+
+This first request likely included local model initialization or process warm-up.
+
+Runs 2 through 10 averaged:
+
+```text
+181.214 ms
+= 0.181 seconds per warm run
+```
+
+I am using the full ten-run average as the official measured cost because the capstone requires ten actual runs and their average.
+
+The warm-run average is included separately to show steady-state performance after initialization.
+
+At 100 runs per day using the measured ten-run average:
+
+```text
+1.099403 seconds × 100
+= 109.9403 seconds
+≈ 1.83 minutes of request compute time per day
+```
+
+This measures elapsed request compute time on my local test environment.
+
+It does not include electricity cost, hardware depreciation, or idle machine time.
