@@ -121,3 +121,50 @@ Invalid requests should fail safely and predictably. I chose 3 out of 3 because 
      A number you missed stays where it is, gets diagnosed, and gets a fix
      attempted. That's where the points are.
      ───────────────────────────────────────────────────────────────────────── -->
+# Unit 9 Capstone Acceptance Criteria
+
+These criteria evaluate the new failure-hardening extension added to Provenance Guard.
+
+## 1. Short and non-semantic input rejection
+
+Target: 5 out of 5 short or non-semantic inputs must return a controlled HTTP 400 response, and none may return HTTP 500.
+
+Why this target:
+
+These inputs previously reached the detector and could cause a server crash. The capstone extension should prevent unsupported text from reaching the scoring stage.
+
+
+## 2. Malformed content rejection
+
+Target: 6 out of 6 punctuation-only, emoji-only, and control-character test inputs must be rejected with a controlled HTTP 400 response.
+
+Why this target:
+
+These inputs do not contain meaningful text for authorship scoring, so they should be rejected instead of receiving a misleading human or AI label.
+
+
+## 3. Oversized and unsupported-script handling
+
+Target: 4 out of 4 oversized or unsupported-script inputs must return a controlled HTTP 400 response without producing an authorship score.
+
+Why this target:
+
+The detector is not designed to reliably score extremely large or unsupported-script text. Rejecting these inputs prevents unsupported behavior from being interpreted as evidence of authorship.
+
+
+## 4. Rejected-request structured logging
+
+Target: 5 out of 5 rejected requests must appear in `logs/capstone_runs.jsonl` with `timestamp`, `input`, `output`, `status_code`, and `duration_ms`.
+
+Why this target:
+
+Failure handling is only useful if rejected requests remain observable. Missing failure records would make debugging and auditing incomplete.
+
+
+## 5. Valid supported text still works
+
+Target: 3 out of 3 valid supported-text submissions must return HTTP 200 and include `content_id`, `guess`, `confidence`, `label`, `model_score`, `style_score`, `combined_score`, and `status`.
+
+Why this target:
+
+The new validation layer should harden failure cases without breaking the normal Provenance Guard scoring path.
