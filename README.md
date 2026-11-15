@@ -968,3 +968,134 @@ At 100 runs per day using the measured ten-run average:
 This measures elapsed request compute time on my local test environment.
 
 It does not include electricity cost, hardware depreciation, or idle machine time.
+
+**Run Log and Verdicts**
+
+Baseline result files:
+
+`results/capstone_baseline_20261115_232956.md`
+
+`results/capstone_baseline_20261115_232956.json`
+
+Produced by:
+
+`run_capstone_baseline.py::main`
+
+The five capstone acceptance criteria were each tested in three separate trials without changing the system between trials.
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Short and non-semantic input rejection | 5/5 | 5/5 | 5/5 | 5/5 | MET |
+| 2. Malformed content rejection | 6/6 | 6/6 | 6/6 | 6/6 | MET |
+| 3. Oversized and unsupported-script handling | 4/4 | 4/4 | 4/4 | 4/4 | MET |
+| 4. Rejected-request structured logging | 5/5 | 5/5 | 5/5 | 5/5 | MET |
+| 5. Valid supported text still works | 3/3 | 3/3 | 3/3 | 3/3 | MET |
+
+All five criteria met their targets in all three baseline trials.
+
+Real output from Trial 1 is shown below.
+
+Criterion 1 — Short and non-semantic input rejection
+
+```json
+{
+  "input": "a",
+  "creator_id": "cap_c1_t1_1",
+  "status_code": 400,
+  "body": {
+    "error": "non_semantic_text",
+    "message": "text must contain enough written language to be scored."
+  }
+}
+```
+
+The one-character input returned a controlled HTTP `400` response rather than reaching the detector and causing an HTTP `500`.
+
+Criterion 2 — Malformed content rejection
+
+```json
+{
+  "input": "'!!! ??? ...'",
+  "creator_id": "cap_c2_t1_1",
+  "status_code": 400,
+  "body": {
+    "error": "non_semantic_text",
+    "message": "text must contain enough written language to be scored."
+  }
+}
+```
+
+The punctuation-only input was rejected before authorship scoring.
+
+Criterion 3 — Oversized and unsupported-script handling
+
+```json
+{
+  "case": "oversized_1",
+  "creator_id": "cap_c3_t1_1",
+  "text_length": 27000,
+  "no_authorship_score": true,
+  "passed": true,
+  "status_code": 400,
+  "body": {
+    "error": "text_too_long",
+    "message": "text cannot exceed 20000 characters."
+  }
+}
+```
+
+The 27,000-character input exceeded the configured 20,000-character limit and was rejected without producing an authorship score.
+
+Criterion 4 — Rejected-request structured logging
+
+```json
+{
+  "creator_id": "cap_c4_t1_1",
+  "found": true,
+  "has_required_fields": true,
+  "status_code": 400,
+  "passed": true,
+  "record": {
+    "timestamp": "2026-11-15T23:29:15.957227+00:00",
+    "input": {
+      "creator_id": "cap_c4_t1_1",
+      "text_preview": "a",
+      "text_length": 1,
+      "text_truncated": false
+    },
+    "output": {
+      "error": "non_semantic_text",
+      "message": "text must contain enough written language to be scored."
+    },
+    "status_code": 400,
+    "duration_ms": 11.784
+  }
+}
+```
+
+The rejected request appeared in the structured capstone log with the required timestamp, input, output, HTTP status, and duration fields.
+
+Criterion 5 — Valid supported text still works
+
+```json
+{
+  "creator_id": "cap_c5_t1_1",
+  "has_required_fields": true,
+  "passed": true,
+  "status_code": 200,
+  "body": {
+    "combined_score": 0.3572,
+    "confidence": 0.3572,
+    "content_id": "2bcc0d5d-7266-4a7e-8da8-14bc73df3376",
+    "guess": "unsure",
+    "label": "The signals are mixed, so we cannot confidently determine whether this writing was produced by a person or by AI.",
+    "model_score": 0.0891,
+    "status": "decided",
+    "style_score": 0.6254
+  }
+}
+```
+
+The normal supported-text request still returned HTTP `200` and all required Provenance Guard scoring fields.
+
+Because all five baseline criteria were MET, there are no baseline misses to diagnose. The next step is to identify which criterion could be made stricter and make one measured improvement to the system.
