@@ -1163,3 +1163,29 @@ After-improvement result files:
 | 5. Valid supported text still works | 3/3 | 3/3 | 3/3 | 3/3 | MET |
 
 The improvement helped. The original acceptance criteria remained MET, so there was no regression in the measured behavior, while the additional mixed-script probe changed from HTTP `200` before the improvement to controlled HTTP `400` after the improvement.
+
+
+**What's Still Broken**
+
+All five acceptance criteria were MET in all three trials before and after the improvement, so there are no remaining criterion misses.
+
+However, Criterion 3 was set too low because the original four cases tested oversized text and fully unsupported scripts but did not test mixed Latin and non-Latin text. The additional mixed-script probe exposed that gap even though the original criterion was technically MET.
+
+If I wrote this target again, I would tighten Criterion 3 to:
+
+> 6 out of 6 oversized or unsupported-script inputs must return HTTP 400 without producing an authorship score, including at least two mixed Latin/non-Latin inputs and at least two fully non-Latin inputs.
+
+The current validation is also intentionally strict: any alphabetic non-Latin character causes rejection. That is safer for the current English/Latin-focused detector, but it could reject otherwise valid English writing that contains a word or name written in another script.
+
+If this were a real production system and I had another unit, the first thing I would do is define and test a more precise supported-language policy rather than simply allowing or rejecting text based on the presence of non-Latin characters. I would do this first because input validation determines which users can reach the detector at all, so overly broad rejection can create avoidable false rejections.
+
+
+**How I Used AI**
+
+I used AI at two specific points during the capstone.
+
+First, I asked AI to help turn the failure modes I had already observed in Provenance Guard into measurable capstone acceptance criteria. It suggested criteria with explicit targets for short input, malformed content, unsupported scripts, structured logging, and preserving the valid scoring path. I reviewed those suggestions and used five criteria that matched the failure-hardening extension I was building.
+
+Second, after all five baseline criteria passed, I asked AI to help identify a meaningful weakness that the original tests did not expose. It suggested probing mixed Latin and non-Latin text. That probe returned HTTP 200 and received an authorship score, which showed that my validator only checked whether some Latin characters were present. I then changed `input_validation.py` so it separately detects non-Latin alphabetic characters and rejects unsupported mixed-script input before scoring.
+
+I used AI to help structure the testing and diagnosis, but I ran the commands, inspected the actual outputs, made the code changes in the repository, and used the measured before-and-after results in this README.
