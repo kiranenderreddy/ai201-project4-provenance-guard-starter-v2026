@@ -773,5 +773,47 @@ Unit 8
 [x] What's Still Broken updated from the after-run
 [ ] At least four new Unit 8 commits
 [ ] Same repository URL submitted
+
+
+
+
+## Capstone
+
+**What This Extends**
+
+I am extending my existing Provenance Guard system.
+
+The current system accepts text through `POST /submit`, calculates a model signal and a stylometry signal, combines them into an authorship score, returns a human/unsure/AI label, records decisions in an audit log, and supports appeals.
+
+For the capstone, I am extending the system so it handles unsupported and malformed text more safely before the text reaches the detector.
+
+**The Shape**
+
+I chose **Shape B — Harden against failure**.
+
+The new capability is a failure-hardening layer for `POST /submit`.
+
+The extension will handle cases such as:
+
+- text that is too short for the detector,
+- punctuation-only input,
+- control-character input,
+- emoji-only or non-semantic input,
+- excessively large input,
+- other text that cannot be meaningfully scored.
+
+Instead of allowing these inputs to crash the detector or receive misleading authorship labels, the route will return controlled responses and record the failure in the structured log.
+
+**Out of Scope**
+
+For this capstone:
+
+- I am not replacing the GPT-2 detector.
+- I am not changing the stylometry algorithm.
+- I am not changing the signal weights.
+- I am not changing the human or AI thresholds.
+- I am not adding another AI-detection model.
+- I am not rebuilding the interface.
+- I am not starting a new project or repository.
 ---
 📖 How to run this project: RUNNING.md
