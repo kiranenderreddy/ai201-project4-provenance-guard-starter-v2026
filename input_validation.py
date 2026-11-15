@@ -71,11 +71,25 @@ def validate_text_for_scoring(text):
         and "LATIN" in unicodedata.name(char, "")
     ]
 
+    non_latin_letters = [
+        char
+        for char in stripped
+        if char.isalpha()
+        and "LATIN" not in unicodedata.name(char, "")
+    ]
+
     if not latin_letters:
         return (
             False,
             "unsupported_script",
             "text must contain supported Latin-script writing.",
+        )
+
+    if non_latin_letters:
+        return (
+            False,
+            "unsupported_script",
+            "text contains unsupported non-Latin script characters.",
         )
 
     # Reject one-character inputs, giant single words, and other

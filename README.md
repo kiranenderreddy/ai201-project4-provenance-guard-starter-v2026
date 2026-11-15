@@ -1099,3 +1099,67 @@ Criterion 5 — Valid supported text still works
 The normal supported-text request still returned HTTP `200` and all required Provenance Guard scoring fields.
 
 Because all five baseline criteria were MET, there are no baseline misses to diagnose. The next step is to identify which criterion could be made stricter and make one measured improvement to the system.
+
+**The Improvement**
+
+All five baseline criteria were MET in all three trials. However, Criterion 3 was not strict enough to expose one mixed-script weakness.
+
+The original validator only checked whether at least one Latin-script letter was present. Because of that, text containing both supported Latin text and unsupported non-Latin text could still reach the detector.
+
+Before the improvement, I tested this mixed English and Arabic input:
+
+```text
+This is a normal English sentence with enough words mixed with Arabic text هذا نص عربي طويل للاختبار
+```
+
+The system returned:
+
+```json
+{
+  "status": 200,
+  "combined_score": 0.6314,
+  "confidence": 0.6314,
+  "guess": "unsure",
+  "model_score": 0.5705,
+  "style_score": 0.6923
+}
+```
+
+This showed that the validation stage was only checking for the presence of Latin characters rather than checking whether unsupported alphabetic scripts were also present.
+
+I made one improvement in `input_validation.py`: the validator now separately identifies non-Latin alphabetic characters and rejects the request before scoring when they are present.
+
+After the improvement, the same mixed-script test returned:
+
+```json
+{
+  "error": "unsupported_script",
+  "message": "text contains unsupported non-Latin script characters."
+}
+```
+
+with HTTP status:
+
+```text
+400
+```
+
+This improvement closed the mixed-script gap without changing the detector, stylometry calculation, signal weights, or scoring thresholds.
+
+The full five-criterion evaluation was then run again for three trials using `run_capstone_after.py`.
+
+After-improvement result files:
+
+`results/capstone_after_20261115_234024.md`
+
+`results/capstone_after_20261115_234024.json`
+
+| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Short and non-semantic input rejection | 5/5 | 5/5 | 5/5 | 5/5 | MET |
+| 2. Malformed content rejection | 6/6 | 6/6 | 6/6 | 6/6 | MET |
+| 3. Oversized and unsupported-script handling | 4/4 | 4/4 | 4/4 | 4/4 | MET |
+| 4. Rejected-request structured logging | 5/5 | 5/5 | 5/5 | 5/5 | MET |
+| 5. Valid supported text still works | 3/3 | 3/3 | 3/3 | 3/3 | MET |
+
+The improvement helped. The original acceptance criteria remained MET, so there was no regression in the measured behavior, while the additional mixed-script probe changed from HTTP `200` before the improvement to controlled HTTP `400` after the improvement.
